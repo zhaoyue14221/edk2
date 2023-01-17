@@ -1357,7 +1357,7 @@ GetProcessorLocationByApicId (
           // Account for max possible thread count to decode ApicId
           //
           AsmCpuid (CPUID_VIR_PHY_ADDRESS_SIZE, NULL, NULL, &AmdVirPhyAddressSizeEcx.Uint32, NULL);
-          MaxLogicProcessorsPerPackage = 1 << AmdVirPhyAddressSizeEcx.Bits.ApicIdCoreIdSize;
+          MaxLogicProcessorsPerPackage = 1 << 7;
 
           //
           // Get cores per processor package

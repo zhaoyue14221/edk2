@@ -457,6 +457,50 @@ FreeHostStatusBuffer:
   return Status;
 }
 
+EFI_STATUS
+EFIAPI
+VirtioBlkReadWriteBlocks64KSplit (
+  IN  EFI_BLOCK_IO_PROTOCOL  *This,
+  IN  UINT32                 MediaId,
+  IN  BOOLEAN                RequestIsWrite,        
+  IN  EFI_LBA                Lba,
+  IN  UINTN                  BufferSize,
+  OUT VOID                   *Buffer
+  )
+{
+  EFI_STATUS  Status = EFI_BAD_BUFFER_SIZE;
+  VBLK_DEV    *Dev = VIRTIO_BLK_FROM_BLOCK_IO (This);
+  char        *IoBuffer = (char*)Buffer;
+  
+  while (BufferSize > 0)
+  {
+    UINTN IoSize = MIN(BufferSize, SIZE_64KB);
+
+    Status = SynchronousRequest(
+        Dev,
+        Lba,
+        IoSize,
+        IoBuffer,
+        RequestIsWrite
+    );
+
+    if (EFI_ERROR(Status))
+    {
+      DEBUG((
+          DEBUG_ERROR,
+          "VirtioBlk: Error during IO operation.\n"));
+      break;
+    }
+
+    Lba += IoSize / Dev->BlockIoMedia.BlockSize;
+    IoBuffer += IoSize;
+
+    BufferSize -= IoSize;
+  }
+  
+  return Status;
+}
+
 /**
 
   ReadBlocks() operation for virtio-blk.
@@ -501,14 +545,8 @@ VirtioBlkReadBlocks (
   if (EFI_ERROR (Status)) {
     return Status;
   }
-
-  return SynchronousRequest (
-           Dev,
-           Lba,
-           BufferSize,
-           Buffer,
-           FALSE       // RequestIsWrite
-           );
+  
+  return VirtioBlkReadWriteBlocks64KSplit(This, MediaId, FALSE, Lba, BufferSize, Buffer);
 }
 
 /**
@@ -556,13 +594,7 @@ VirtioBlkWriteBlocks (
     return Status;
   }
 
-  return SynchronousRequest (
-           Dev,
-           Lba,
-           BufferSize,
-           Buffer,
-           TRUE        // RequestIsWrite
-           );
+  return VirtioBlkReadWriteBlocks64KSplit(This, MediaId, TRUE, Lba, BufferSize, Buffer);
 }
 
 /**
