@@ -165,6 +165,17 @@ VirtioBlkReset (
   IN BOOLEAN                ExtendedVerification
   );
 
+EFI_STATUS
+EFIAPI
+VirtioBlkReadWriteBlocks64KSplit (
+  IN  EFI_BLOCK_IO_PROTOCOL  *This,
+  IN  UINT32                 MediaId,
+  IN  BOOLEAN                RequestIsWrite,        
+  IN  EFI_LBA                Lba,
+  IN  UINTN                  BufferSize,
+  OUT VOID                   *Buffer
+  );
+
 /**
 
   ReadBlocks() operation for virtio-blk.
