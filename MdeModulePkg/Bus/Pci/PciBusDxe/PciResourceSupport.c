@@ -14,7 +14,7 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
 BOOLEAN  mReserveIsaAliases = FALSE;
 BOOLEAN  mReserveVgaAliases = FALSE;
 BOOLEAN  mPolicyDetermined  = FALSE;
-
+UINT8    mPcieSwitchP2P = 0xff;
 /**
   The function is used to skip VGA range.
 
@@ -324,6 +324,85 @@ CalculateApertureIo16 (
   Bridge->Length = MAX (Bridge->Length, PaddingAperture);
 }
 
+
+VOID GetBridgeBehindRange(
+  IN  PCI_IO_DEVICE  *Bridge, 
+  IN  PCI_BAR_TYPE   ResType, 
+  OUT UINT64         *Max, 
+  OUT UINT64         *Min, 
+  OUT UINT64         *Len
+  )
+{
+  PCI_IO_DEVICE  *Temp;
+  LIST_ENTRY     *CurrentLink;
+  UINT8           Index;
+  UINT64          MaxTemp = 0;
+  UINT64          MinTemp = MAX_UINT64;
+  UINT64          LenTemp = 0;
+
+  CurrentLink = Bridge->ChildList.ForwardLink;
+
+  while (CurrentLink != NULL && CurrentLink != &Bridge->ChildList) {
+    Temp = PCI_IO_DEVICE_FROM_LINK (CurrentLink);
+
+    if (IS_PCI_BRIDGE (&Temp->Pci)) {
+        GetBridgeBehindRange(Temp, ResType, &MaxTemp, &MinTemp, &LenTemp);
+        if (MaxTemp != 0 && MinTemp != MAX_UINT64 && LenTemp != 0) {
+
+      	  if (MaxTemp > *Max) {
+            *Max = MaxTemp;
+            *Len = LenTemp;
+          }
+          if (MinTemp < *Min) {
+            *Min = MinTemp;
+	  }
+        }
+    } else {
+        for (Index = 0; Index < PCI_MAX_BAR -1; Index++) {
+          if ((Temp->PciBar)[Index].BaseAddress != MAX_UINT64 &&
+              (Temp->PciBar)[Index].BaseAddress != 0 &&
+              (Temp->PciBar)[Index].Length != MAX_UINT64 &&
+              (Temp->PciBar)[Index].Length != 0 &&
+              (Temp->PciBar)[Index].BarType == ResType) {
+
+              if ((Temp->PciBar)[Index].BaseAddress > *Max) {
+                 *Max = (Temp->PciBar)[Index].BaseAddress;
+                 *Len = (Temp->PciBar)[Index].Length;
+              }
+              if ((Temp->PciBar)[Index].BaseAddress < *Min) {
+                 *Min = (Temp->PciBar)[Index].BaseAddress;
+	      }
+          }
+        }
+    }
+    //DEBUG ((DEBUG_INFO, "GetBridgeBehindRange bdf [%x:%x.%x] end %lx %lx %lx\n",
+    //                    Temp->BusNumber, Temp->DeviceNumber, Temp->FunctionNumber, *Max, *Min, *Len ));
+
+    CurrentLink = CurrentLink->ForwardLink;
+  }
+}
+
+EFI_STATUS RecalcBridgeLength(
+  IN   PCI_IO_DEVICE   *PciDev, 
+  IN   PCI_BAR_TYPE    ResType,  
+  OUT  UINT64          *Length
+  ) 
+{
+  UINT64 Max = 0;
+  UINT64 Min = MAX_UINT64;
+  UINT64 Len = 0;
+
+  GetBridgeBehindRange(PciDev, ResType, &Max, &Min, &Len);
+  DEBUG ((DEBUG_INFO, "RecalcBridgeLength max %lx min %lx len %lx\n", Max, Min, Len));
+
+  if (Max == 0 || Min == MAX_UINT64 || Len == 0)
+    return EFI_INVALID_PARAMETER;
+
+  *Length = Max - Min + Len;
+  return EFI_SUCCESS;
+}
+
+
 /**
   This function is used to calculate the resource aperture
   for a given bridge device.
@@ -339,6 +418,8 @@ CalculateResourceAperture (
   UINT64             Aperture[2];
   LIST_ENTRY         *CurrentLink;
   PCI_RESOURCE_NODE  *Node;
+  UINT64 LengthTemp = 0;
+  EFI_STATUS         Status;
 
   if (Bridge == NULL) {
     return;
@@ -377,6 +458,15 @@ CalculateResourceAperture (
     //
     Node->Offset = ALIGN_VALUE (Aperture[Node->ResourceUsage], Node->Alignment + 1);
 
+    if (mPcieSwitchP2P == 1 && IS_PCI_BRIDGE (&(Node->PciDev->Pci)) && Node->PciDev->BusNumber >= 0x20) {
+      Status = RecalcBridgeLength(Node->PciDev, Node->ResType, &LengthTemp);
+
+      if (Status == EFI_SUCCESS) {
+        DEBUG ((DEBUG_INFO, "CalculateResourceAperture: ResType %d Length %lx->%lx Offset %lx\n", 
+				Node->ResType, Node->Length, LengthTemp, Node->Offset));
+        Node->Length = LengthTemp;
+      }
+    }
     //
     // Record the total aperture.
     //
@@ -1183,6 +1273,85 @@ BridgeSupportResourceDecode (
   return FALSE;
 }
 
+VOID RecalcBridgeBase(
+  IN     PCI_IO_DEVICE  *Bridge, 
+  IN     PCI_BAR_TYPE   ResType, 
+  IN OUT UINT64         *Base
+  )
+{
+  PCI_IO_DEVICE  *Temp;
+  LIST_ENTRY     *CurrentLink;
+  UINT8          Index;
+  UINT64         BaseTemp = MAX_UINT64;
+
+  CurrentLink = Bridge->ChildList.ForwardLink;
+
+  while (CurrentLink != NULL && CurrentLink != &Bridge->ChildList) {
+    Temp = PCI_IO_DEVICE_FROM_LINK (CurrentLink);
+    //DEBUG ((DEBUG_INFO, "RecalcBridgeBase bdf [%x:%x.%x] start base %lx\n",
+    //                    Temp->BusNumber, Temp->DeviceNumber, Temp->FunctionNumber, *Base ));
+    if (IS_PCI_BRIDGE (&Temp->Pci)) {
+        RecalcBridgeBase(Temp, ResType, &BaseTemp);
+        if (BaseTemp != MAX_UINT64 && BaseTemp != 0 && BaseTemp < *Base) {
+          *Base = BaseTemp;
+	}
+    }
+    else {
+        for (Index = 0; Index < PCI_MAX_BAR -1; Index++) {
+          if ((Temp->PciBar)[Index].BaseAddress != MAX_UINT64 &&
+              (Temp->PciBar)[Index].BaseAddress != 0 &&
+              (Temp->PciBar)[Index].BarType == ResType &&
+              (Temp->PciBar)[Index].BaseAddress < *Base) {
+            *Base = (Temp->PciBar)[Index].BaseAddress;
+	  }
+        }
+    }
+    //DEBUG ((DEBUG_INFO, "RecalcBridgeBase bdf [%x:%x.%x] end base %lx\n",
+    //                    Temp->BusNumber, Temp->DeviceNumber, Temp->FunctionNumber, *Base ));
+ 
+    CurrentLink = CurrentLink->ForwardLink;
+  }
+}
+
+EFI_STATUS RecalcBase(
+  IN  PCI_RESOURCE_NODE  *Bridge, 
+  OUT UINT64             *Base
+  ) 
+{
+  UINT8              Index;
+
+  if (!IS_PCI_BRIDGE (&Bridge->PciDev->Pci)) {
+    for (Index = 0; Index < PCI_MAX_BAR -1; Index++) {
+      if ((Bridge->PciDev->PciBar)[Index].BaseAddress != MAX_UINT64 &&
+          (Bridge->PciDev->PciBar)[Index].BaseAddress != 0 &&
+          (Bridge->PciDev->PciBar)[Index].BarType == Bridge->ResType) {
+          *Base = (Bridge->PciDev->PciBar)[Index].BaseAddress;
+          DEBUG ((DEBUG_INFO, "RecalcBase bdf[%x:%x.%x] ResType %d base %lx\n", 
+			  Bridge->PciDev->BusNumber,
+                          Bridge->PciDev->DeviceNumber,
+                          Bridge->PciDev->FunctionNumber,
+                          Bridge->ResType,
+			  *Base));
+          return EFI_SUCCESS;
+        }
+    }
+    return EFI_INVALID_PARAMETER;
+  }
+
+  RecalcBridgeBase(Bridge->PciDev, Bridge->ResType, Base);
+  DEBUG ((DEBUG_INFO, "RecalcBase  bdf[%x:%x.%x] ResType %d base %lx\n", 
+			  Bridge->PciDev->BusNumber,
+                          Bridge->PciDev->DeviceNumber,
+                          Bridge->PciDev->FunctionNumber,
+                          Bridge->ResType,
+			  *Base));
+
+  if (*Base == MAX_UINT64)
+    return EFI_INVALID_PARAMETER;
+
+  return EFI_SUCCESS;
+}
+
 /**
   This function is used to program the resource allocated
   for each resource node under specified bridge.
@@ -1204,12 +1373,20 @@ ProgramResource (
   LIST_ENTRY         *CurrentLink;
   PCI_RESOURCE_NODE  *Node;
   EFI_STATUS         Status;
+  UINT64             ReBase = MAX_UINT64;
 
   if (Base == gAllOne) {
     return EFI_OUT_OF_RESOURCES;
   }
 
   CurrentLink = Bridge->ChildList.ForwardLink;
+
+  if (mPcieSwitchP2P == 1 && Bridge->PciDev->BusNumber >= 0x20) {
+    Status = RecalcBase(Bridge, &ReBase);
+    if (!EFI_ERROR (Status)) {
+      Base = ReBase;
+    }
+  }
 
   while (CurrentLink != &Bridge->ChildList) {
     Node = RESOURCE_NODE_FROM_LINK (CurrentLink);
@@ -1283,6 +1460,15 @@ ProgramBar (
   // pci device could have multiple bar
   //
   Node->PciDev->Allocated = TRUE;
+
+  if (mPcieSwitchP2P == 1 && Node->PciDev->BusNumber >= 0x20) {
+    DEBUG ((DEBUG_INFO, "ProgramBar [%x:%x.%x] bar%x base %lx[=%lx+%lx] -> %lx\n",
+                          Node->PciDev->BusNumber,Node->PciDev->DeviceNumber, Node->PciDev->FunctionNumber,
+                          Node->Bar,
+                          Address, Base, Node->Offset,
+			  Node->PciDev->PciBar[Node->Bar].BaseAddress));
+    Address = Node->PciDev->PciBar[Node->Bar].BaseAddress;
+  }
 
   switch ((Node->PciDev->PciBar[Node->Bar]).BarType) {
     case PciBarTypeIo16:

@@ -406,6 +406,24 @@ FreeBridges:
   return NULL;
 }
 
+VOID EFIAPI GetPcieSwitchP2P(
+  OUT UINT8 *P2PFlag
+  )
+{
+  EFI_STATUS            Status;
+  FIRMWARE_CONFIG_ITEM  FwCfgItem;
+  UINTN                 FwCfgSize;
+  UINT8                 Flag;
+
+  *P2PFlag = 0;
+  Status = QemuFwCfgFindFile ("pcie-switch-p2p", &FwCfgItem, &FwCfgSize);
+  if (Status == RETURN_SUCCESS && (FwCfgSize == sizeof Flag)) {
+    QemuFwCfgSelectItem (FwCfgItem);
+    QemuFwCfgReadBytes (FwCfgSize, &Flag);
+    *P2PFlag = Flag;
+  }
+}
+
 /**
   Utility function to read root bridges information from host-provided fw-cfg
   file and return them in an array.
@@ -443,6 +461,24 @@ PciHostBridgeUtilityGetRootBridgesHostProvided (
   PCI_ROOT_BRIDGE_APERTURE  MemAbove4G;
   PCI_ROOT_BRIDGE_APERTURE  PMem;
   PCI_ROOT_BRIDGE_APERTURE  PMemAbove4G;
+
+  Io.Base = MAX_UINT64;
+  Io.Limit = 0;
+  Io.Translation = 0;
+
+  Mem.Base = MAX_UINT64;
+  Mem.Limit = 0;
+  Mem.Translation = 0;
+  MemAbove4G.Base = MAX_UINT64;
+  MemAbove4G.Limit = 0;
+  MemAbove4G.Translation = 0;
+
+  PMem.Base = MAX_UINT64;
+  PMem.Limit = 0;
+  PMem.Translation = 0;
+  PMemAbove4G.Base = MAX_UINT64;
+  PMemAbove4G.Limit = 0;
+  PMemAbove4G.Translation = 0;
 
   //
   // Initialize the Hardware Info list head to start with an empty but valid

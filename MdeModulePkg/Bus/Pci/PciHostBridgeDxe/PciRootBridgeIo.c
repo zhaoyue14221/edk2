@@ -51,6 +51,7 @@ UINT8  mOutStride[] = {
   0  // EfiPciWidthFillUint64
 };
 
+extern UINT8 mPcieSwitchP2P;
 /**
   Construct the Pci Root Bridge instance.
 
@@ -264,6 +265,7 @@ CreateRootBridge (
     }
   }
 
+  RootBridge->RootBridgeIo.SupportPcieSwitchP2P = mPcieSwitchP2P;
   RootBridge->RootBridgeIo.SegmentNumber  = Bridge->Segment;
   RootBridge->RootBridgeIo.PollMem        = RootBridgeIoPollMem;
   RootBridge->RootBridgeIo.PollIo         = RootBridgeIoPollIo;

@@ -113,4 +113,6 @@ PciHostBridgeResourceConflict (
   VOID        *Configuration
   );
 
+VOID EFIAPI GetPcieSwitchP2P(UINT8 *P2PFlag);
+
 #endif

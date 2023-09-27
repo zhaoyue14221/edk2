@@ -429,6 +429,7 @@ struct _EFI_PCI_ROOT_BRIDGE_IO_PROTOCOL {
   /// The segment number that this PCI root bridge resides.
   ///
   UINT32                                             SegmentNumber;
+  UINT8                                              SupportPcieSwitchP2P;
 };
 
 extern EFI_GUID  gEfiPciRootBridgeIoProtocolGuid;

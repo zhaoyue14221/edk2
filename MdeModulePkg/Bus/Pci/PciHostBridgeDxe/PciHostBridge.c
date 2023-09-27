@@ -23,7 +23,7 @@ GLOBAL_REMOVE_IF_UNREFERENCED CHAR16  *mPciResourceTypeStr[] = {
 EDKII_IOMMU_PROTOCOL  *mIoMmu;
 EFI_EVENT             mIoMmuEvent;
 VOID                  *mIoMmuRegistration;
-
+UINT8                 mPcieSwitchP2P;
 /**
   This routine gets translation offset from a root bridge instance by resource type.
 
@@ -450,6 +450,9 @@ InitializePciHostBridge (
   BOOLEAN                   ResourceAssigned;
   LIST_ENTRY                *Link;
   UINT64                    HostAddress;
+  
+  GetPcieSwitchP2P(&mPcieSwitchP2P);
+  DEBUG ((DEBUG_INFO, "InitializePciHostBridge PcieSwitchP2P: %d\n", mPcieSwitchP2P));
 
   RootBridges = PciHostBridgeGetRootBridges (&RootBridgeCount);
   if ((RootBridges == NULL) || (RootBridgeCount == 0)) {

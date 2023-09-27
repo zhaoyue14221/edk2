@@ -23,7 +23,7 @@ CHAR16  *mBarTypeStr[] = {
   L"   Mem",
   L"Unknow"
 };
-
+extern UINT8    mPcieSwitchP2P;
 /**
   Retrieve the max bus number that is assigned to the Root Bridge hierarchy.
   It can support the case that there are multiple bus ranges.
@@ -528,6 +528,10 @@ PciHostBridgeResourceAllocator (
         return EFI_NOT_FOUND;
       }
 
+      if (mPcieSwitchP2P == 0xff) {
+	mPcieSwitchP2P = RootBridgeDev->PciRootBridgeIo->SupportPcieSwitchP2P;
+        DEBUG ((DEBUG_INFO, "PciBus: PciHostBridgeResourceAllocator PcieSwitchP2P:%d\n", mPcieSwitchP2P));
+      }
       //
       // Create the entire system resource map from the information collected by
       // enumerator. Several resource tree was created

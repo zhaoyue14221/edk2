@@ -403,6 +403,10 @@ LoadOpRomImage (
   RomInMemory  = NULL;
   CodeType     = 0xFF;
 
+  if (!IS_PCI_VGA(&(PciDevice->Pci))) {
+    return EFI_SUCCESS;
+  }
+
   //
   // Get the RomBarIndex
   //
