@@ -385,7 +385,9 @@ VOID GetBridgeBehindRange(
 EFI_STATUS RecalcBridgeLength(
   IN   PCI_IO_DEVICE   *PciDev, 
   IN   PCI_BAR_TYPE    ResType,  
-  OUT  UINT64          *Length
+  OUT  UINT64          *Length,
+  OUT  UINT64          *MaxAdd,
+  OUT  UINT64          *MinAdd
   ) 
 {
   UINT64 Max = 0;
@@ -398,7 +400,9 @@ EFI_STATUS RecalcBridgeLength(
   if (Max == 0 || Min == MAX_UINT64 || Len == 0)
     return EFI_INVALID_PARAMETER;
 
-  *Length = Max - Min + Len;
+  *Length = Len;
+  *MaxAdd = Max;
+  *MinAdd = Min;
   return EFI_SUCCESS;
 }
 
@@ -419,6 +423,9 @@ CalculateResourceAperture (
   LIST_ENTRY         *CurrentLink;
   PCI_RESOURCE_NODE  *Node;
   UINT64 LengthTemp = 0;
+  UINT64 MaxTemp = 0;
+  UINT64 MinTemp = 0;
+  UINT64 BaseStart = 0;
   EFI_STATUS         Status;
 
   if (Bridge == NULL) {
@@ -456,16 +463,28 @@ CalculateResourceAperture (
     // Apply padding resource to meet alignment requirement
     // Node offset will be used in future real allocation
     //
-    Node->Offset = ALIGN_VALUE (Aperture[Node->ResourceUsage], Node->Alignment + 1);
+    //Node->Offset = ALIGN_VALUE (Aperture[Node->ResourceUsage], Node->Alignment + 1);
 
     if (mPcieSwitchP2P == 1 && IS_PCI_BRIDGE (&(Node->PciDev->Pci)) && Node->PciDev->BusNumber >= 0x20) {
-      Status = RecalcBridgeLength(Node->PciDev, Node->ResType, &LengthTemp);
+      Node->Offset = Aperture[Node->ResourceUsage];
+      Status = RecalcBridgeLength(Node->PciDev, Node->ResType, &LengthTemp, &MaxTemp, &MinTemp);
 
       if (Status == EFI_SUCCESS) {
-        DEBUG ((DEBUG_INFO, "CalculateResourceAperture: ResType %d Length %lx->%lx Offset %lx\n", 
-				Node->ResType, Node->Length, LengthTemp, Node->Offset));
-        Node->Length = LengthTemp;
+        if (BaseStart == 0) {
+          BaseStart = MinTemp;
+        }
+        BaseStart = BaseStart + Node->Offset;
+        if (MaxTemp + LengthTemp >= BaseStart) {
+          DEBUG ((DEBUG_INFO, "CalculateResourceAperture: ResType %d Length %lx->%lx Offset %lx\n",
+				Node->ResType, Node->Length, MaxTemp + LengthTemp - BaseStart, Node->Offset));
+          Node->Length = MaxTemp + LengthTemp - BaseStart;
+	} else {
+          DEBUG ((DEBUG_INFO, "CalculateResourceAperture: ResType %d Length %lx Max %lx BaseStart %lx Offset %lx\n",
+                                Node->ResType, Node->Length, MaxTemp, BaseStart, Node->Offset));
+        }
       }
+    } else {
+      Node->Offset = ALIGN_VALUE (Aperture[Node->ResourceUsage], Node->Alignment + 1);
     }
     //
     // Record the total aperture.
@@ -1407,6 +1426,12 @@ ProgramResource (
       //
       // Program the PCI devices under this bridge
       //
+      DEBUG ((DEBUG_INFO, "ProgramResource  bdf[%x:%x.%x] ResType %d base %lx offset %lx\n",
+                          Node->PciDev->BusNumber,
+                          Node->PciDev->DeviceNumber,
+                          Node->PciDev->FunctionNumber,
+                          Node->ResType,
+                          Base, Node->Offset));
       Status = ProgramResource (Base + Node->Offset, Node);
       if (EFI_ERROR (Status)) {
         return Status;
