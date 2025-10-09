@@ -395,7 +395,8 @@ EFI_STATUS RecalcBridgeLength(
   UINT64 Len = 0;
 
   GetBridgeBehindRange(PciDev, ResType, &Max, &Min, &Len);
-  DEBUG ((DEBUG_INFO, "RecalcBridgeLength max %lx min %lx len %lx\n", Max, Min, Len));
+  DEBUG ((DEBUG_INFO, "RecalcBridgeLength bdf [%x:%x.%x] max %lx min %lx len %lx\n", 
+			  PciDev->BusNumber, PciDev->DeviceNumber, PciDev->FunctionNumber, Max, Min, Len));
 
   if (Max == 0 || Min == MAX_UINT64 || Len == 0)
     return EFI_INVALID_PARAMETER;
@@ -482,6 +483,10 @@ CalculateResourceAperture (
           DEBUG ((DEBUG_INFO, "CalculateResourceAperture: ResType %d Length %lx Max %lx BaseStart %lx Offset %lx\n",
                                 Node->ResType, Node->Length, MaxTemp, BaseStart, Node->Offset));
         }
+      } else {
+        DEBUG ((DEBUG_INFO, "CalculateResourceAperture: ResType %d Length 0\n",
+                                Node->ResType));
+        Node->Length = 0;
       }
     } else {
       Node->Offset = ALIGN_VALUE (Aperture[Node->ResourceUsage], Node->Alignment + 1);
@@ -1486,7 +1491,9 @@ ProgramBar (
   //
   Node->PciDev->Allocated = TRUE;
 
-  if (mPcieSwitchP2P == 1 && Node->PciDev->BusNumber >= 0x20) {
+  if (mPcieSwitchP2P == 1 && Node->PciDev->BusNumber >= 0x20 &&
+      (Node->PciDev->PciBar[Node->Bar]).BarType != PciBarTypeIo16 &&
+      (Node->PciDev->PciBar[Node->Bar]).BarType != PciBarTypeIo32) {
     DEBUG ((DEBUG_INFO, "ProgramBar [%x:%x.%x] bar%x base %lx[=%lx+%lx] -> %lx\n",
                           Node->PciDev->BusNumber,Node->PciDev->DeviceNumber, Node->PciDev->FunctionNumber,
                           Node->Bar,

@@ -748,12 +748,21 @@ GetResourcePadding (
     //
     // Request defaults.
     //
-    SetMmioPadding (
-      --FirstResource,
-      FALSE,
-      TRUE,
-      (UINTN)HighBitSetRoundUp32 (SIZE_2MB)
-      );
+    if (Address->Bus >= 0x20){
+      SetMmioPadding (
+        --FirstResource,
+        FALSE,
+        TRUE,
+        (UINTN)HighBitSetRoundUp32 (SIZE_512KB)
+        );
+    } else {
+      SetMmioPadding (
+        --FirstResource,
+        FALSE,
+        TRUE,
+        (UINTN)HighBitSetRoundUp32 (SIZE_2MB)
+        );
+    }
   }
 
   if (DefaultPrefMmio) {
