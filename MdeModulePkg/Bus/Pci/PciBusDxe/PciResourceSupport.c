@@ -156,6 +156,11 @@ MergeResourceTree (
   ASSERT (Dst != NULL);
   ASSERT (Res != NULL);
 
+  //DEBUG ((DEBUG_INFO, "MergeResourceTree bdf [%x:%x.%x] [%x:%x.%x] dst %d src %d type %d\n",
+  //			  Dst->PciDev->BusNumber, Dst->PciDev->DeviceNumber, Dst->PciDev->FunctionNumber,
+  //			  Res->PciDev->BusNumber, Res->PciDev->DeviceNumber, Res->PciDev->FunctionNumber,
+  //			  Dst->ResType, Res->ResType, TypeMerge));
+
   while (!IsListEmpty (&Res->ChildList)) {
     CurrentLink = Res->ChildList.ForwardLink;
 
@@ -363,7 +368,8 @@ VOID GetBridgeBehindRange(
               (Temp->PciBar)[Index].BaseAddress != 0 &&
               (Temp->PciBar)[Index].Length != MAX_UINT64 &&
               (Temp->PciBar)[Index].Length != 0 &&
-              (Temp->PciBar)[Index].BarType == ResType) {
+              (((Temp->PciBar)[Index].BarType == ResType) ||
+	       ((ResType == PciBarTypeMem32) && ((Temp->PciBar)[Index].BarType == PciBarTypeMem64)))) {
 
               if ((Temp->PciBar)[Index].BaseAddress > *Max) {
                  *Max = (Temp->PciBar)[Index].BaseAddress;
@@ -373,6 +379,9 @@ VOID GetBridgeBehindRange(
                  *Min = (Temp->PciBar)[Index].BaseAddress;
 	      }
           }
+          //DEBUG ((DEBUG_INFO, "GetBridgeBehindRange bdf [%x:%x.%x] end %lx %lx %d\n",
+          //              Temp->BusNumber, Temp->DeviceNumber, Temp->FunctionNumber, (Temp->PciBar)[Index].BaseAddress,
+          //             (Temp->PciBar)[Index].Length, (Temp->PciBar)[Index].BarType));
         }
     }
     //DEBUG ((DEBUG_INFO, "GetBridgeBehindRange bdf [%x:%x.%x] end %lx %lx %lx\n",
@@ -449,6 +458,10 @@ CalculateResourceAperture (
         )
   {
     Node = RESOURCE_NODE_FROM_LINK (CurrentLink);
+
+    //DEBUG ((DEBUG_INFO, "CalculateResourceAperture: bdf [%x:%x.%x] ResType %d Length %lx\n",
+    //                     Node->PciDev->BusNumber, Node->PciDev->DeviceNumber, Node->PciDev->FunctionNumber,
+    //                     Node->ResType, Node->Length));
 
     //
     // It's possible for a bridge to contain multiple padding resource
@@ -550,6 +563,9 @@ GetResourceFromDevice (
   ResourceRequested = FALSE;
 
   for (Index = 0; Index < PCI_MAX_BAR; Index++) {
+    //DEBUG ((DEBUG_INFO, "GetResourceFromDevice: bdf [%x:%x.%x] bar Index %d ResType %d Length %lx Alignment %lx\n",
+    //                     PciDev->BusNumber, PciDev->DeviceNumber, PciDev->FunctionNumber,
+    //                     Index, (PciDev->PciBar)[Index].BarType, (PciDev->PciBar)[Index].Length, (PciDev->PciBar)[Index].Alignment));
     switch ((PciDev->PciBar)[Index].BarType) {
       case PciBarTypeMem32:
       case PciBarTypeOpRom:
